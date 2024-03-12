@@ -5,17 +5,17 @@ services:
     ports:
       - "27017:27017"
     networks:
-      - gitraph
+      - gitgraf
 
-  gitraph:
+  gitgraf:
     build: .
-    image: gitraph
+    image: gitgraf
     depends_on:
       - mongodb
     networks:
-      - gitraph
+      - gitgraf
     environment:
       MONGO_URI: mongodb://mongodb:27017
 
 networks:
-  gitraph:
+  gitgraf:
