@@ -14,8 +14,10 @@ type commitRepository struct {
 	collection *mongo.Collection
 }
 
-func NewCommitRepository(collection *mongo.Collection) repository.CommitRepository {
-	return &commitRepository{collection: collection}
+func NewCommitRepository(client *mongo.Client, dbName, collectionName string) repository.CommitRepository {
+	return &commitRepository{
+		collection: client.Database(dbName).Collection(collectionName),
+	}
 }
 
 func (r *commitRepository) GetByID(ctx context.Context, id primitive.ObjectID) (*model.Commit, error) {
@@ -39,7 +41,7 @@ func (r *commitRepository) Update(ctx context.Context, commit *model.Commit) err
 		"$set": bson.M{
 			"user_id":    commit.UserId,
 			"created_at": commit.CreatedAt,
-			"approvers":  commit.Approvers,
+			"approver_ids":  commit.ApproverIds,
 			"stats": bson.M{
 				"lines_added":    commit.Stats.LinesAdded,
 				"lines_deleted":  commit.Stats.LinesDeleted,
@@ -57,4 +59,23 @@ func (r *commitRepository) Delete(ctx context.Context, id primitive.ObjectID) er
 	filter := bson.M{"_id": id}
 	_, err := r.collection.DeleteOne(ctx, filter)
 	return err
+}
+
+func (r *commitRepository) CreateMany(ctx context.Context, commits []*model.Commit) ([]primitive.ObjectID, error) {
+	documents := make([]interface{}, len(commits))
+	for i, commit := range commits {
+		documents[i] = commit
+	}
+
+	res, err := r.collection.InsertMany(ctx, documents)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]primitive.ObjectID, len(res.InsertedIDs))
+	for i, id := range res.InsertedIDs {
+		ids[i] = id.(primitive.ObjectID)
+	}
+
+	return ids, nil
 }

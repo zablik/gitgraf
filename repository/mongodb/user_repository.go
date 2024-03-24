@@ -14,8 +14,10 @@ type userRepository struct {
 	collection *mongo.Collection
 }
 
-func NewUserRepository(collection *mongo.Collection) repository.UserRepository {
-	return &userRepository{collection: collection}
+func NewUserRepository(client *mongo.Client, dbName, collectionName string) repository.UserRepository {
+	return &userRepository{
+		collection: client.Database(dbName).Collection(collectionName),
+	}
 }
 
 func (r *userRepository) GetByID(ctx context.Context, id primitive.ObjectID) (*model.User, error) {
@@ -39,7 +41,7 @@ func (r *userRepository) Update(ctx context.Context, user *model.User) error {
 	update := bson.M{
 		"$set": bson.M{
 			"name": user.Name,
-			
+
 			// Add other user fields here...
 		},
 	}
@@ -51,4 +53,50 @@ func (r *userRepository) Delete(ctx context.Context, id primitive.ObjectID) erro
 	filter := bson.M{"_id": id}
 	_, err := r.collection.DeleteOne(ctx, filter)
 	return err
+}
+
+func (r *userRepository) CreateMany(ctx context.Context, users []*model.User) ([]primitive.ObjectID, error) {
+	documents := convertToInterfaceSlice(users)
+
+	res, err := r.collection.InsertMany(ctx, documents)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]primitive.ObjectID, len(res.InsertedIDs))
+	for i, id := range res.InsertedIDs {
+		ids[i] = id.(primitive.ObjectID)
+	}
+
+	return ids, nil
+}
+
+func (r *userRepository) GetAll(ctx context.Context) ([]*model.User, error) {
+	filter := bson.M{} // empty filter to get all documents
+	users := []*model.User{}
+	cursor, err := r.collection.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	for cursor.Next(ctx) {
+		user := &model.User{}
+		err := cursor.Decode(user)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
+func convertToInterfaceSlice(slice []*model.User) []interface{} {
+	var s []interface{}
+	for _, item := range slice {
+		s = append(s, item)
+	}
+	return s
 }
